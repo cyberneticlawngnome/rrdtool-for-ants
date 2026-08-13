@@ -21,7 +21,7 @@ static unsigned long videoFrameTimer = 0;
 const unsigned long MS_PER_FRAME = 50; // ~20 FPS (1000ms / 20)
 
 int currentFileNum = 0;
-int doGame = 1;
+int doGame = 0;
 int doVideo = 0;
 char currentGameName[50] = "  "; 
 
@@ -48,7 +48,7 @@ void setup(void) {
 
   display.setFont(liberationSans_8ptFontInfo);
   printCentered("Finding SD card..", 46);
-  display.setBitDepth(true);
+  display.setBitDepth(1);
   delay(20);
   
   uint8_t* rawLogoPtr = (uint8_t*)TinyCircuits96;
@@ -60,7 +60,7 @@ void setup(void) {
     display.endTransfer();
     delay(20 + x / 3);
   }
-  display.setBitDepth(false);
+  display.setBitDepth(0);
   delay(250);
   
   if (!sd.begin(10, SPI_FULL_SPEED)) {
@@ -95,6 +95,7 @@ void setup(void) {
 }
 
 int blockInput = 1;
+bool doDisplay = true;
 
 void loop() {
   unsigned long currentMillis = millis();
@@ -127,21 +128,29 @@ void loop() {
     jumpApplication();
   }
 
+  // Calculate skipRender out in the open before the timing interval check
+  skipRender = (currentMillis - videoFrameTimer) > (MS_PER_FRAME * 2);
+
   // OPTIMIZATION: Check if it is time to process a frame
   if (currentMillis - videoFrameTimer >= MS_PER_FRAME) {
     if (doVideo) {
       // Pass the skip flag directly into your optimized video decoder
       bufferVideoFrame(skipRender);
     }
-    videoFrameTimer += MS_PER_FRAME; // Catch up the chronological frame schedule step
-    frameCount++;
+    
+    // Always advance the time step uniformly to keep audio feeding smooth
+    videoFrameTimer += MS_PER_FRAME; 
 
-    if (currentMillis - previousMillis >= 1000) {
-      currentFPS = frameCount;
-      frameCount = 0;
-      previousMillis = currentMillis;
+    if (!skipRender) {
+      doDisplay = true;
+      frameCount++;
     }
+  }
 
+  if (currentMillis - previousMillis >= 1000) {
+    currentFPS = frameCount;
+    frameCount = 0;
+    previousMillis = currentMillis;
   }
 
   if (doGame) {
@@ -167,6 +176,10 @@ void loop() {
 
     sprintf(statsBuffer, "fps: %d", currentFPS);
     printMicro(statsBuffer, 1, 58, TS_16b_Red);
+  }
+  if (doDisplay) {
+    writeToDisplay();
+    doDisplay = false;
   }
 }
 
@@ -249,7 +262,7 @@ void writeToDisplay() {
   display.writeBuffer((uint8_t*)buffer, 96 * 64 * 2);
   
   display.endTransfer();
-  display.setBitDepth(0);
+  //display.setBitDepth(0);
 }
 
 
@@ -425,7 +438,7 @@ void showStatusBar(int state, unsigned int color1, unsigned int color2) {
         buffer[(y * 96) + x] = color2;
     }
   }
-  display.setBitDepth(1);
+  //display.setBitDepth(1);
   display.goTo(0, 20);
   display.startData();
   
